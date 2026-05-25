@@ -24,6 +24,8 @@ def register(subparsers):
                    help='Explicit port (bypasses auto-pick range)')
     p.add_argument('-m', '--comment', default='',
                    help='Free-form note for the record')
+    p.add_argument('--keep-updated', action='store_true',
+                   help='Watch files and live-reload browsers via SSE injection')
     p.set_defaults(func=run)
 
 
@@ -75,6 +77,8 @@ def run(args):
            '--port', str(port), '--directory', root]
     if single_file:
         cmd += ['--single-file', single_file]
+    if args.keep_updated:
+        cmd += ['--keep-updated']
 
     log_file = open(log_path, 'a', buffering=1)
     try:
@@ -96,6 +100,7 @@ def run(args):
         'target': args.target,
         'staging_dir': staging_dir,
         'single_file': single_file,
+        'keep_updated': args.keep_updated,
         'cmdline': ' '.join(cmd),
         'bindings': [{'family': 'tcp4', 'addr': '0.0.0.0', 'port': port}],
         'timestamp': timestamp,
