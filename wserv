@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""wserv entry point. Symlink-safe: resolves __file__ before importing."""
+import os
+import sys
+
+_HERE = os.path.dirname(os.path.realpath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from cli import main
+
+if __name__ == '__main__':
+    sys.exit(main())
