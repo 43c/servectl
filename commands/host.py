@@ -28,6 +28,9 @@ def register(subparsers):
                    help='Free-form note for the record')
     p.add_argument('--keep-updated', action='store_true',
                    help='Watch files and live-reload browsers via SSE injection')
+    p.add_argument('--pdfjs', action='store_true',
+                   help='Use bundled pdf.js viewer for single-file PDFs '
+                        '(only with --keep-updated; preserves current page across reloads)')
     p.set_defaults(func=run)
 
 
@@ -82,9 +85,11 @@ def run(args):
     if args.keep_updated:
         cmd += ['--keep-updated']
 
-    # Use bundled pdf.js viewer for single-file PDFs when live-reloading
-    # is on; only that combination needs cross-browser page preservation.
-    if args.keep_updated and single_file:
+    if args.pdfjs and not args.keep_updated:
+        print('wserv: --pdfjs has no effect without --keep-updated; ignoring.',
+              file=sys.stderr)
+
+    if args.pdfjs and args.keep_updated and single_file:
         mime, _ = mimetypes.guess_type(single_file)
         if mime == 'application/pdf':
             try:
