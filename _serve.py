@@ -118,13 +118,35 @@ def _accepts_html(headers):
     return 'text/html' in (headers.get('Accept', '') or '')
 
 
-def _inject(content):
-    if RELOAD_SCRIPT in content:
+# PDF wrapper uses a per-element src swap instead of location.reload() so
+# the browser's PDF viewer instance survives, preserving current-page
+# state. Edge handles this well; Chrome/Firefox vary. The fallback to
+# location.reload() covers the case where the embed isn't found.
+PDF_RELOAD_SCRIPT = (
+    b"<script>(()=>{if(window.__wservReload)return;"
+    b"window.__wservReload=true;"
+    b"const es=new EventSource('/__wserv/reload');"
+    b"es.addEventListener('reload',()=>{"
+    b'const el=document.querySelector(\'embed[type="application/pdf"]\');'
+    b"if(!el){location.reload();return;}"
+    b"const u=new URL(el.getAttribute('src'),location.origin);"
+    b"u.searchParams.set('_t',Date.now());"
+    b"el.setAttribute('src',u.toString());"
+    b"});})();</script>"
+)
+
+
+def _inject_with(content, script):
+    if script in content:
         return content
     m = _BODY_END_RE.search(content)
     if m:
-        return content[:m.start()] + RELOAD_SCRIPT + content[m.start():]
-    return content + RELOAD_SCRIPT
+        return content[:m.start()] + script + content[m.start():]
+    return content + script
+
+
+def _inject(content):
+    return _inject_with(content, RELOAD_SCRIPT)
 
 
 def _wrapper_html(file_url, filename, mime):
@@ -159,7 +181,8 @@ def _wrapper_html(file_url, filename, mime):
         f'font-family:ui-monospace,monospace;font-size:14px}}</style>'
         f'</head><body>{media}</body></html>'
     )
-    return _inject(body.encode('utf-8'))
+    script = PDF_RELOAD_SCRIPT if mime == 'application/pdf' else RELOAD_SCRIPT
+    return _inject_with(body.encode('utf-8'), script)
 
 
 def _build_dir_listing(fs_path, url_path):
