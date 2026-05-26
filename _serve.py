@@ -32,6 +32,10 @@ import threading
 import time
 import urllib.parse
 
+# pdf.js ships these extensions; make sure they have correct MIME types.
+mimetypes.add_type('text/javascript', '.mjs')
+mimetypes.add_type('application/wasm', '.wasm')
+
 
 RELOAD_SCRIPT = (
     b"<script>(()=>{if(window.__wservReload)return;"
@@ -118,11 +122,10 @@ def _accepts_html(headers):
     return 'text/html' in (headers.get('Accept', '') or '')
 
 
-# PDF wrapper uses a per-element src swap instead of location.reload() so
-# the browser's PDF viewer instance survives, preserving current-page
-# state. Edge handles this well; Chrome/Firefox vary. The fallback to
-# location.reload() covers the case where the embed isn't found.
-PDF_RELOAD_SCRIPT = (
+# Native-PDF-viewer fallback when pdf.js isn't available. Swapping the
+# <embed>'s src in place preserves the viewer instance, so browsers that
+# retain page state across src changes (Edge, sometimes) keep position.
+PDF_EMBED_RELOAD_SCRIPT = (
     b"<script>(()=>{if(window.__wservReload)return;"
     b"window.__wservReload=true;"
     b"const es=new EventSource('/__wserv/reload');"
@@ -134,6 +137,30 @@ PDF_RELOAD_SCRIPT = (
     b"el.setAttribute('src',u.toString());"
     b"});})();</script>"
 )
+
+# pdf.js wrapper: talks to PDFViewerApplication inside the iframe to
+# re-open the doc and restore current page after pagesinit. Works
+# cross-browser because pdf.js is our own viewer.
+def _pdfjs_reload_script(file_url):
+    file_url_js = file_url.replace("'", "\\'")
+    return (
+        "<script>(()=>{if(window.__wservReload)return;"
+        "window.__wservReload=true;"
+        "const iframe=document.getElementById('wsv-pdf');"
+        f"const fileUrl='{file_url_js}';"
+        "function reload(){"
+        "let app;try{app=iframe.contentWindow.PDFViewerApplication;}catch(e){}"
+        "if(!app||!app.eventBus){iframe.src=iframe.src;return;}"
+        "const savedPage=app.page;"
+        "const restore=()=>{try{app.page=savedPage;}catch(e){}"
+        "app.eventBus.off('pagesinit',restore);};"
+        "app.eventBus.on('pagesinit',restore);"
+        "app.open({url:fileUrl+'?_t='+Date.now()});"
+        "}"
+        "const es=new EventSource('/__wserv/reload');"
+        "es.addEventListener('reload',reload);"
+        "})();</script>"
+    ).encode('utf-8')
 
 
 def _inject_with(content, script):
@@ -149,8 +176,22 @@ def _inject(content):
     return _inject_with(content, RELOAD_SCRIPT)
 
 
-def _wrapper_html(file_url, filename, mime):
+def _wrapper_html(file_url, filename, mime, pdfjs_available):
     safe_name = html.escape(filename)
+    # pdf.js path: full-viewport iframe pointed at the bundled viewer.
+    if mime == 'application/pdf' and pdfjs_available:
+        viewer_src = '/__pdfjs/web/viewer.html?file=' + urllib.parse.quote(file_url)
+        body = (
+            f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+            f'<title>{safe_name}</title>'
+            f'<style>html,body{{margin:0;padding:0;height:100%}}'
+            f'#wsv-pdf{{width:100vw;height:100vh;border:0;display:block}}</style>'
+            f'</head><body>'
+            f'<iframe id="wsv-pdf" src="{viewer_src}"></iframe>'
+            f'</body></html>'
+        ).encode('utf-8')
+        return _inject_with(body, _pdfjs_reload_script(file_url))
+
     if mime.startswith('image/'):
         media = f'<img src="{file_url}" alt="{safe_name}">'
     elif mime.startswith('video/'):
@@ -181,7 +222,7 @@ def _wrapper_html(file_url, filename, mime):
         f'font-family:ui-monospace,monospace;font-size:14px}}</style>'
         f'</head><body>{media}</body></html>'
     )
-    script = PDF_RELOAD_SCRIPT if mime == 'application/pdf' else RELOAD_SCRIPT
+    script = PDF_EMBED_RELOAD_SCRIPT if mime == 'application/pdf' else RELOAD_SCRIPT
     return _inject_with(body.encode('utf-8'), script)
 
 
@@ -220,6 +261,9 @@ def main():
                    help='Rewrite GET / to GET /<single-file> internally')
     p.add_argument('--keep-updated', action='store_true',
                    help='Watch directory + SSE + inject reload script')
+    p.add_argument('--pdfjs-dir', default=None,
+                   help='If set, mount pdf.js dist at /__pdfjs/ and use it '
+                        'for the PDF single-file wrapper')
     args = p.parse_args()
 
     directory = os.path.abspath(args.directory)
@@ -227,6 +271,8 @@ def main():
     single_url = '/' + urllib.parse.quote(single_file) if single_file else None
     single_local = os.path.join(directory, single_file) if single_file else None
     keep_updated = args.keep_updated
+    pdfjs_dir = os.path.abspath(args.pdfjs_dir) if args.pdfjs_dir else None
+    pdfjs_root_real = os.path.realpath(pdfjs_dir) if pdfjs_dir else None
     broker = Broker()
 
     if keep_updated:
@@ -239,8 +285,9 @@ def main():
             super().__init__(*a, directory=directory, **kw)
 
         def log_message(self, format, *fargs):
-            # Suppress the SSE keepalive noise; keep the rest.
-            if '/__wserv/reload' in format % fargs:
+            # Suppress noisy paths: SSE keepalive and pdf.js asset requests.
+            msg = format % fargs
+            if '/__wserv/reload' in msg or '/__pdfjs/' in msg:
                 return
             super().log_message(format, *fargs)
 
@@ -259,6 +306,8 @@ def main():
         def do_GET(self):
             if keep_updated and self.path == '/__wserv/reload':
                 return self._serve_sse()
+            if pdfjs_dir and self.path.startswith('/__pdfjs/'):
+                return self._serve_pdfjs(head=False)
             choice = self._maybe_rewrite_root()
             if choice == 'wrapper':
                 return self._serve_wrapper(head=False)
@@ -269,12 +318,42 @@ def main():
         def do_HEAD(self):
             if keep_updated and self.path == '/__wserv/reload':
                 return self._serve_sse_head()
+            if pdfjs_dir and self.path.startswith('/__pdfjs/'):
+                return self._serve_pdfjs(head=True)
             choice = self._maybe_rewrite_root()
             if choice == 'wrapper':
                 return self._serve_wrapper(head=True)
             if keep_updated:
                 return self._inject_get(head=True)
             super().do_HEAD()
+
+        def _serve_pdfjs(self, head):
+            rel = self.path[len('/__pdfjs/'):].split('?', 1)[0].split('#', 1)[0]
+            full = os.path.join(pdfjs_dir, rel)
+            real = os.path.realpath(full)
+            # Containment check (defeats ../ traversal)
+            if not (real == pdfjs_root_real
+                    or real.startswith(pdfjs_root_real + os.sep)):
+                self.send_error(403, 'Forbidden')
+                return
+            if not os.path.isfile(real):
+                self.send_error(404, 'Not found')
+                return
+            ctype, _ = mimetypes.guess_type(real)
+            try:
+                with open(real, 'rb') as f:
+                    content = f.read()
+            except OSError:
+                self.send_error(404, 'Not found')
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', ctype or 'application/octet-stream')
+            self.send_header('Content-Length', str(len(content)))
+            # pdf.js assets are versioned by directory; let them cache.
+            self.send_header('Cache-Control', 'public, max-age=86400')
+            self.end_headers()
+            if not head:
+                self.wfile.write(content)
 
         # --- handlers ---
 
@@ -312,7 +391,8 @@ def main():
         def _serve_wrapper(self, head):
             mime, _ = mimetypes.guess_type(single_local)
             mime = mime or 'application/octet-stream'
-            body = _wrapper_html(single_url, single_file, mime)
+            body = _wrapper_html(single_url, single_file, mime,
+                                 pdfjs_available=bool(pdfjs_dir))
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.send_header('Content-Length', str(len(body)))

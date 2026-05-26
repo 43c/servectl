@@ -1,3 +1,4 @@
+import mimetypes
 import os
 import re
 import subprocess
@@ -6,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import config
+import pdfjs
 import picker
 import record
 import staging as staging_mod
@@ -79,6 +81,17 @@ def run(args):
         cmd += ['--single-file', single_file]
     if args.keep_updated:
         cmd += ['--keep-updated']
+
+    # Use bundled pdf.js viewer for single-file PDFs when live-reloading
+    # is on; only that combination needs cross-browser page preservation.
+    if args.keep_updated and single_file:
+        mime, _ = mimetypes.guess_type(single_file)
+        if mime == 'application/pdf':
+            try:
+                cmd += ['--pdfjs-dir', str(pdfjs.ensure())]
+            except Exception as e:
+                print(f'wserv: pdf.js fetch failed ({e}); falling back to <embed>',
+                      file=sys.stderr)
 
     log_file = open(log_path, 'a', buffering=1)
     try:
