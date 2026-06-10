@@ -45,8 +45,8 @@ def load():
 
 
 def port_range():
-    cfg = load().get('port', {})
-    return int(cfg.get('min', 10000)), int(cfg.get('max', 32000))
+    cfg = load()['port']  # always present: load() starts from DEFAULTS
+    return int(cfg['min']), int(cfg['max'])
 
 
 def is_ignored(scanned):

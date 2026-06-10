@@ -1,6 +1,6 @@
 import fmt
 import record
-import sync as sync_mod
+from commands import _shared
 
 
 def register(subparsers):
@@ -11,13 +11,12 @@ def register(subparsers):
     p.add_argument('query', nargs='+')
     p.add_argument('-v', '--verbose', action='store_true',
                    help='Show all bindings and cmdline')
-    p.add_argument('--no-sync', action='store_true', help='Skip auto-sync')
+    _shared.add_no_sync_flag(p)
     p.set_defaults(func=run)
 
 
 def run(args):
-    if not args.no_sync:
-        sync_mod.sync()
+    _shared.sync_unless_skipped(args)
     terms = [q.lower() for q in args.query]
     matches = []
     for e in record.load():

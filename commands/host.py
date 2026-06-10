@@ -10,7 +10,7 @@ import config
 import pdfjs
 import picker
 import record
-import staging as staging_mod
+import staging
 
 _SERVE_SCRIPT = str(Path(__file__).resolve().parent.parent / '_serve.py')
 
@@ -54,14 +54,14 @@ def run(args):
     config.ensure_dirs()
 
     try:
-        root, staging_dir, single_file = staging_mod.resolve(args.target)
+        root, staging_dir, single_file = staging.resolve(args.target)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 1
 
     port = _pick_port(args.port)
     if port is None:
-        staging_mod.cleanup(staging_dir)
+        staging.cleanup(staging_dir)
         return 1
 
     for existing in record.find_by_port(port):
@@ -71,7 +71,7 @@ def run(args):
                 f"dir {existing.get('directory')}).",
                 file=sys.stderr,
             )
-            staging_mod.cleanup(staging_dir)
+            staging.cleanup(staging_dir)
             return 1
         record.remove_pid(existing.get('pid'))
 
@@ -85,21 +85,18 @@ def run(args):
     if args.keep_updated:
         cmd += ['--keep-updated']
 
-    if args.pdfjs and not args.keep_updated:
-        print('wserv: --pdfjs has no effect without --keep-updated; ignoring.',
-              file=sys.stderr)
-
-    if args.pdfjs and args.keep_updated and single_file:
-        mime, _ = mimetypes.guess_type(single_file)
-        if mime == 'application/pdf':
+    if args.pdfjs:
+        if not args.keep_updated:
+            print('wserv: --pdfjs has no effect without --keep-updated; ignoring.',
+                  file=sys.stderr)
+        elif single_file and mimetypes.guess_type(single_file)[0] == 'application/pdf':
             try:
                 cmd += ['--pdfjs-dir', str(pdfjs.ensure())]
             except Exception as e:
                 print(f'wserv: pdf.js fetch failed ({e}); falling back to <embed>',
                       file=sys.stderr)
 
-    log_file = open(log_path, 'a', buffering=1)
-    try:
+    with open(log_path, 'a', buffering=1) as log_file:
         proc = subprocess.Popen(
             cmd,
             cwd=os.getcwd(),
@@ -108,8 +105,6 @@ def run(args):
             stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
-    finally:
-        log_file.close()
 
     entry = {
         'pid': proc.pid,

@@ -37,13 +37,19 @@ mimetypes.add_type('text/javascript', '.mjs')
 mimetypes.add_type('application/wasm', '.wasm')
 
 
-RELOAD_SCRIPT = (
-    b"<script>(()=>{if(window.__wservReload)return;"
-    b"window.__wservReload=true;"
-    b"const es=new EventSource('/__wserv/reload');"
-    b"es.addEventListener('reload',()=>location.reload());"
-    b"})();</script>"
-)
+def _sse_script(on_reload_js):
+    """Wrap a JS reload handler in the boilerplate every injected script
+    shares: a run-once guard plus an EventSource on the reload endpoint."""
+    return (
+        '<script>(()=>{if(window.__wservReload)return;'
+        'window.__wservReload=true;'
+        "const es=new EventSource('/__wserv/reload');"
+        f"es.addEventListener('reload',{on_reload_js});"
+        '})();</script>'
+    ).encode('utf-8')
+
+
+RELOAD_SCRIPT = _sse_script('()=>location.reload()')
 
 _BODY_END_RE = re.compile(rb'</body\s*>', re.IGNORECASE)
 
@@ -125,42 +131,34 @@ def _accepts_html(headers):
 # Native-PDF-viewer fallback when pdf.js isn't available. Swapping the
 # <embed>'s src in place preserves the viewer instance, so browsers that
 # retain page state across src changes (Edge, sometimes) keep position.
-PDF_EMBED_RELOAD_SCRIPT = (
-    b"<script>(()=>{if(window.__wservReload)return;"
-    b"window.__wservReload=true;"
-    b"const es=new EventSource('/__wserv/reload');"
-    b"es.addEventListener('reload',()=>{"
-    b'const el=document.querySelector(\'embed[type="application/pdf"]\');'
-    b"if(!el){location.reload();return;}"
-    b"const u=new URL(el.getAttribute('src'),location.origin);"
-    b"u.searchParams.set('_t',Date.now());"
-    b"el.setAttribute('src',u.toString());"
-    b"});})();</script>"
+PDF_EMBED_RELOAD_SCRIPT = _sse_script(
+    '()=>{'
+    'const el=document.querySelector(\'embed[type="application/pdf"]\');'
+    'if(!el){location.reload();return;}'
+    "const u=new URL(el.getAttribute('src'),location.origin);"
+    "u.searchParams.set('_t',Date.now());"
+    "el.setAttribute('src',u.toString());"
+    '}'
 )
+
 
 # pdf.js wrapper: talks to PDFViewerApplication inside the iframe to
 # re-open the doc and restore current page after pagesinit. Works
 # cross-browser because pdf.js is our own viewer.
 def _pdfjs_reload_script(file_url):
     file_url_js = file_url.replace("'", "\\'")
-    return (
-        "<script>(()=>{if(window.__wservReload)return;"
-        "window.__wservReload=true;"
+    return _sse_script(
+        '()=>{'
         "const iframe=document.getElementById('wsv-pdf');"
-        f"const fileUrl='{file_url_js}';"
-        "function reload(){"
-        "let app;try{app=iframe.contentWindow.PDFViewerApplication;}catch(e){}"
-        "if(!app||!app.eventBus){iframe.src=iframe.src;return;}"
-        "const savedPage=app.page;"
-        "const restore=()=>{try{app.page=savedPage;}catch(e){}"
+        'let app;try{app=iframe.contentWindow.PDFViewerApplication;}catch(e){}'
+        'if(!app||!app.eventBus){iframe.src=iframe.src;return;}'
+        'const savedPage=app.page;'
+        'const restore=()=>{try{app.page=savedPage;}catch(e){}'
         "app.eventBus.off('pagesinit',restore);};"
         "app.eventBus.on('pagesinit',restore);"
-        "app.open({url:fileUrl+'?_t='+Date.now()});"
-        "}"
-        "const es=new EventSource('/__wserv/reload');"
-        "es.addEventListener('reload',reload);"
-        "})();</script>"
-    ).encode('utf-8')
+        f"app.open({{url:'{file_url_js}?_t='+Date.now()}});"
+        '}'
+    )
 
 
 def _inject_with(content, script):
@@ -291,41 +289,40 @@ def main():
                 return
             super().log_message(format, *fargs)
 
-        # --- single-file root rewrite (always on when single_url set) ---
-
-        def _maybe_rewrite_root(self):
-            if single_url and self.path in ('/', ''):
-                # In keep-updated mode for non-HTML, browsers get the wrapper.
-                if keep_updated and not _is_html_path(single_local) and _accepts_html(self.headers):
-                    return 'wrapper'
-                self.path = single_url
-            return None
-
-        # --- request dispatch ---
+        # --- request dispatch (GET and HEAD differ only in writing the body) ---
 
         def do_GET(self):
-            if keep_updated and self.path == '/__wserv/reload':
-                return self._serve_sse()
-            if pdfjs_dir and self.path.startswith('/__pdfjs/'):
-                return self._serve_pdfjs(head=False)
-            choice = self._maybe_rewrite_root()
-            if choice == 'wrapper':
-                return self._serve_wrapper(head=False)
-            if keep_updated:
-                return self._inject_get(head=False)
-            super().do_GET()
+            self._dispatch(head=False)
 
         def do_HEAD(self):
+            self._dispatch(head=True)
+
+        def _dispatch(self, head):
             if keep_updated and self.path == '/__wserv/reload':
-                return self._serve_sse_head()
+                return self._serve_sse(head)
             if pdfjs_dir and self.path.startswith('/__pdfjs/'):
-                return self._serve_pdfjs(head=True)
-            choice = self._maybe_rewrite_root()
-            if choice == 'wrapper':
-                return self._serve_wrapper(head=True)
+                return self._serve_pdfjs(head)
+            if single_url and self.path in ('/', ''):
+                # In keep-updated mode for non-HTML, browsers get the wrapper;
+                # everything else gets the file itself at the root URL.
+                if keep_updated and not _is_html_path(single_local) and _accepts_html(self.headers):
+                    return self._serve_wrapper(head)
+                self.path = single_url
             if keep_updated:
-                return self._inject_get(head=True)
-            super().do_HEAD()
+                return self._inject_get(head)
+            super().do_HEAD() if head else super().do_GET()
+
+        def _send_body(self, body, ctype, head,
+                       cache_control='no-store', last_modified=None):
+            self.send_response(200)
+            self.send_header('Content-Type', ctype)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', cache_control)
+            if last_modified is not None:
+                self.send_header('Last-Modified', self.date_time_string(last_modified))
+            self.end_headers()
+            if not head:
+                self.wfile.write(body)
 
         def _serve_pdfjs(self, head):
             rel = self.path[len('/__pdfjs/'):].split('?', 1)[0].split('#', 1)[0]
@@ -346,30 +343,20 @@ def main():
             except OSError:
                 self.send_error(404, 'Not found')
                 return
-            self.send_response(200)
-            self.send_header('Content-Type', ctype or 'application/octet-stream')
-            self.send_header('Content-Length', str(len(content)))
             # pdf.js assets are versioned by directory; let them cache.
-            self.send_header('Cache-Control', 'public, max-age=86400')
-            self.end_headers()
-            if not head:
-                self.wfile.write(content)
+            self._send_body(content, ctype or 'application/octet-stream', head,
+                            cache_control='public, max-age=86400')
 
         # --- handlers ---
 
-        def _serve_sse_head(self):
+        def _serve_sse(self, head):
             self.send_response(200)
             self.send_header('Content-Type', 'text/event-stream')
             self.send_header('Cache-Control', 'no-store')
             self.send_header('Connection', 'close')
             self.end_headers()
-
-        def _serve_sse(self):
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/event-stream')
-            self.send_header('Cache-Control', 'no-store')
-            self.send_header('Connection', 'close')
-            self.end_headers()
+            if head:
+                return
             q = broker.subscribe()
             try:
                 self.wfile.write(b'retry: 1500\n\n')
@@ -393,13 +380,7 @@ def main():
             mime = mime or 'application/octet-stream'
             body = _wrapper_html(single_url, single_file, mime,
                                  pdfjs_available=bool(pdfjs_dir))
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.send_header('Content-Length', str(len(body)))
-            self.send_header('Cache-Control', 'no-store')
-            self.end_headers()
-            if not head:
-                self.wfile.write(body)
+            self._send_body(body, 'text/html; charset=utf-8', head)
 
         def _inject_get(self, head):
             fs_path = self.translate_path(self.path)
@@ -420,13 +401,7 @@ def main():
                     if body is None:
                         self.send_error(403, 'No permission to list directory')
                         return
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'text/html; charset=utf-8')
-                    self.send_header('Content-Length', str(len(body)))
-                    self.send_header('Cache-Control', 'no-store')
-                    self.end_headers()
-                    if not head:
-                        self.wfile.write(body)
+                    self._send_body(body, 'text/html; charset=utf-8', head)
                     return
 
             try:
@@ -444,19 +419,10 @@ def main():
                 content = _inject(content)
 
             try:
-                st = os.stat(fs_path)
+                mtime = os.stat(fs_path).st_mtime
             except OSError:
-                st = None
-
-            self.send_response(200)
-            self.send_header('Content-Type', ctype)
-            self.send_header('Content-Length', str(len(content)))
-            self.send_header('Cache-Control', 'no-store')
-            if st:
-                self.send_header('Last-Modified', self.date_time_string(st.st_mtime))
-            self.end_headers()
-            if not head:
-                self.wfile.write(content)
+                mtime = None
+            self._send_body(content, ctype, head, last_modified=mtime)
 
     with http.server.ThreadingHTTPServer((args.bind, args.port), Handler) as httpd:
         try:

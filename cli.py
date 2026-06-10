@@ -17,6 +17,8 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest='command', metavar='COMMAND')
 
     for _finder, name, _ispkg in pkgutil.iter_modules(commands.__path__):
+        if name.startswith('_'):
+            continue
         module = importlib.import_module(f'commands.{name}')
         register = getattr(module, 'register', None)
         if callable(register):
