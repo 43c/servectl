@@ -24,6 +24,9 @@ def register(subparsers):
                    help='Path/file/glob (comma-separated allowed). Omit to serve CWD.')
     p.add_argument('--port', type=int, default=None,
                    help='Explicit port (bypasses auto-pick range)')
+    p.add_argument('--bind', default='127.0.0.1',
+                   help='Address to bind (default 127.0.0.1; use 0.0.0.0 to '
+                        'expose on the network)')
     p.add_argument('-m', '--comment', default='',
                    help='Free-form note for the record')
     p.add_argument('--keep-updated', action='store_true',
@@ -39,11 +42,11 @@ def _sanitize(s):
     return cleaned or 'no-comment'
 
 
-def _pick_port(explicit):
+def _pick_port(explicit, bind):
     if explicit is not None:
         return explicit
     lo, hi = config.port_range()
-    port = picker.first_free_port(lo, hi)
+    port = picker.first_free_port(lo, hi, bind)
     if port is None:
         print(f'No free port in [{lo}, {hi}].', file=sys.stderr)
         return None
@@ -59,7 +62,7 @@ def run(args):
         print(str(e), file=sys.stderr)
         return 1
 
-    port = _pick_port(args.port)
+    port = _pick_port(args.port, args.bind)
     if port is None:
         staging.cleanup(staging_dir)
         return 1
@@ -79,7 +82,7 @@ def run(args):
     timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
     log_path = config.LOGS_DIR / f"{timestamp}_{port}_{_sanitize(comment)}.log"
     cmd = ['uv', 'run', 'python', _SERVE_SCRIPT,
-           '--port', str(port), '--directory', root]
+           '--port', str(port), '--directory', root, '--bind', args.bind]
     if single_file:
         cmd += ['--single-file', single_file]
     if args.keep_updated:
@@ -115,7 +118,11 @@ def run(args):
         'single_file': single_file,
         'keep_updated': args.keep_updated,
         'cmdline': ' '.join(cmd),
-        'bindings': [{'family': 'tcp4', 'addr': '0.0.0.0', 'port': port}],
+        'bindings': [{
+            'family': 'tcp6' if ':' in args.bind else 'tcp4',
+            'addr': args.bind,
+            'port': port,
+        }],
         'timestamp': timestamp,
         'log': str(log_path),
         'source': 'spawned',

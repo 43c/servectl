@@ -1,7 +1,7 @@
 import socket
 
 
-def is_port_free(port, host='0.0.0.0'):
+def is_port_free(port, host='127.0.0.1'):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
@@ -14,8 +14,8 @@ def is_port_free(port, host='0.0.0.0'):
         s.close()
 
 
-def first_free_port(min_port, max_port):
+def first_free_port(min_port, max_port, host='127.0.0.1'):
     for p in range(min_port, max_port + 1):
-        if is_port_free(p):
+        if is_port_free(p, host):
             return p
     return None

@@ -254,7 +254,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--port', type=int, required=True)
     p.add_argument('--directory', required=True)
-    p.add_argument('--bind', default='0.0.0.0')
+    p.add_argument('--bind', default='127.0.0.1')
     p.add_argument('--single-file', default=None,
                    help='Rewrite GET / to GET /<single-file> internally')
     p.add_argument('--keep-updated', action='store_true',
