@@ -1,6 +1,6 @@
 """Lazy fetch + cache of Mozilla's pdf.js prebuilt viewer.
 
-Used by `wserv host <file>.pdf --keep-updated` so the embedded viewer
+Used by `wserv host pdfjs <file>.pdf` so the embedded viewer
 can survive a document refresh with current-page preserved (which the
 browser-native PDF viewer can't reliably do across src changes).
 """

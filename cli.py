@@ -4,11 +4,16 @@ import pkgutil
 import sys
 
 import commands
+from commands import host
 
 
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
+
+    if len(argv) >= 2 and argv[0] == 'host' and argv[1] in host.VIEWERS:
+        args = host.viewer_parser(argv[1]).parse_args(argv[2:])
+        return args.func(args) or 0
 
     parser = argparse.ArgumentParser(
         prog='wserv',

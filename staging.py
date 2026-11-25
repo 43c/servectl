@@ -44,6 +44,11 @@ def _link_into(staging, src):
     return name
 
 
+def stage_file(path):
+    staging = tempfile.mkdtemp(prefix='wserv-stage-')
+    return staging, staging, _link_into(staging, path)
+
+
 def resolve(target):
     """Returns (root_dir, staging_dir_or_None, single_file_name_or_None).
 
@@ -66,9 +71,7 @@ def resolve(target):
             raise ValueError(f'target not found: {target}')
         if os.path.isdir(p):
             return p, None, None
-        staging = tempfile.mkdtemp(prefix='wserv-stage-')
-        name = _link_into(staging, p)
-        return staging, staging, name
+        return stage_file(p)
 
     staging = tempfile.mkdtemp(prefix='wserv-stage-')
     matched = 0

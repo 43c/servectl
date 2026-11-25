@@ -16,6 +16,8 @@ ln -s ~/.local/share/wserv/wserv ~/.local/bin/wserv
 ```sh
 wserv host ~/reports          # serve a directory on an auto-picked port
 wserv host paper.pdf          # serve one file at /
+wserv host pdfjs paper.pdf    # read with PDF.js
+wserv host md notes.md        # read Markdown with tables, links, and Mermaid diagrams
 wserv host '*.png,notes/**'   # globs, comma-separated lists
 wserv 18000 quick share       # shorthand for: host --port 18000 -m "quick share"
 wserv ls                      # list tracked servers
@@ -35,8 +37,11 @@ wserv stop 18000              # stop by port
 | `prune` | Drop entries whose pid is dead. |
 
 `host` flags: `--port`, `-m COMMENT`, `--bind ADDR` (default `127.0.0.1`),
-`--keep-updated` (reload connected browsers over SSE on file change), `--pdfjs`
-(bundled pdf.js viewer, keeps the page across reloads; needs `--keep-updated`).
+`--keep-updated` (reload on changes, preserving the current page in PDF.js).
+
+The Markdown viewer serves relative images and file links within the document’s
+directory. Use fenced `mermaid` blocks for diagrams and charts. The browser
+loads Mermaid from jsDelivr when a document contains a diagram.
 
 Commands taking a `PORT` accept `--pid` to address by pid instead.
 `ls`/`search`/`open`/`stop`/`add-comment` sync first; `--no-sync` skips it.

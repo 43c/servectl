@@ -1,4 +1,4 @@
-import mimetypes
+import argparse
 import os
 import re
 import subprocess
@@ -14,14 +14,33 @@ import staging
 
 _SERVE_SCRIPT = str(Path(__file__).resolve().parent.parent / '_serve.py')
 
+VIEWERS = {'md': ('Markdown', ('.md', '.markdown')), 'pdfjs': ('PDF', ('.pdf',))}
+
 
 def register(subparsers):
+    viewers = '\n'.join(f'  {name + " FILE":16} View a {label} file.'
+                        for name, (label, _) in sorted(VIEWERS.items()))
     p = subparsers.add_parser(
-        'host',
-        help='Host a directory, file, or glob set over http (default verb)',
+        'host', help='Host a directory, file, or glob set over HTTP',
+        description=f'Viewer subcommands:\n{viewers}',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument('target', nargs='?', default=None,
+    p.add_argument('target', nargs='?',
                    help='Path/file/glob (comma-separated allowed). Omit to serve CWD.')
+    p.set_defaults(viewer=None, func=run)
+    _host_options(p)
+
+
+def viewer_parser(viewer):
+    label, _ = VIEWERS[viewer]
+    p = argparse.ArgumentParser(prog=f'wserv host {viewer}', description=f'View a {label} file.')
+    p.add_argument('target', metavar='FILE')
+    p.set_defaults(viewer=viewer, func=run)
+    _host_options(p)
+    return p
+
+
+def _host_options(p):
     p.add_argument('--port', type=int, default=None,
                    help='Explicit port (bypasses auto-pick range)')
     p.add_argument('--bind', default='127.0.0.1',
@@ -31,10 +50,6 @@ def register(subparsers):
                    help='Free-form note for the record')
     p.add_argument('--keep-updated', action='store_true',
                    help='Watch files and live-reload browsers via SSE injection')
-    p.add_argument('--pdfjs', action='store_true',
-                   help='Use bundled pdf.js viewer for single-file PDFs '
-                        '(only with --keep-updated; preserves current page across reloads)')
-    p.set_defaults(func=run)
 
 
 def _sanitize(s):
@@ -57,7 +72,15 @@ def run(args):
     config.ensure_dirs()
 
     try:
-        root, staging_dir, single_file = staging.resolve(args.target)
+        if args.viewer:
+            label, suffixes = VIEWERS[args.viewer]
+            path = Path(args.target).expanduser()
+            if not path.is_file() or path.suffix.lower() not in suffixes:
+                raise ValueError(f'wserv host {args.viewer} requires a single {label} file: '
+                                 f'{args.target}')
+            root, staging_dir, single_file = staging.stage_file(path)
+        else:
+            root, staging_dir, single_file = staging.resolve(args.target)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -81,23 +104,25 @@ def run(args):
     comment = args.comment or ''
     timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
     log_path = config.LOGS_DIR / f"{timestamp}_{port}_{_sanitize(comment)}.log"
-    cmd = ['uv', 'run', 'python', _SERVE_SCRIPT,
-           '--port', str(port), '--directory', root, '--bind', args.bind]
+    cmd = ['uv', 'run']
+    if args.viewer == 'md':
+        cmd += ['--with', 'markdown-it-py[linkify]==4.2.0']
+    cmd += ['python', _SERVE_SCRIPT,
+            '--port', str(port), '--directory', root, '--bind', args.bind]
     if single_file:
         cmd += ['--single-file', single_file]
     if args.keep_updated:
         cmd += ['--keep-updated']
 
-    if args.pdfjs:
-        if not args.keep_updated:
-            print('wserv: --pdfjs has no effect without --keep-updated; ignoring.',
-                  file=sys.stderr)
-        elif single_file and mimetypes.guess_type(single_file)[0] == 'application/pdf':
-            try:
-                cmd += ['--pdfjs-dir', str(pdfjs.ensure())]
-            except Exception as e:
-                print(f'wserv: pdf.js fetch failed ({e}); falling back to <embed>',
-                      file=sys.stderr)
+    if args.viewer == 'md':
+        cmd += ['--markdown']
+    elif args.viewer == 'pdfjs':
+        try:
+            cmd += ['--pdfjs-dir', str(pdfjs.ensure())]
+        except Exception as e:
+            print(f'wserv: pdf.js fetch failed: {e}', file=sys.stderr)
+            staging.cleanup(staging_dir)
+            return 1
 
     with open(log_path, 'a', buffering=1) as log_file:
         proc = subprocess.Popen(

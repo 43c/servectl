@@ -31,6 +31,7 @@ import re
 import threading
 import time
 import urllib.parse
+from pathlib import Path
 
 # pdf.js ships these extensions; make sure they have correct MIME types.
 mimetypes.add_type('text/javascript', '.mjs')
@@ -174,7 +175,7 @@ def _inject(content):
     return _inject_with(content, RELOAD_SCRIPT)
 
 
-def _wrapper_html(file_url, filename, mime, pdfjs_available):
+def _wrapper_html(file_url, filename, mime, pdfjs_available, keep_updated):
     safe_name = html.escape(filename)
     # pdf.js path: full-viewport iframe pointed at the bundled viewer.
     if mime == 'application/pdf' and pdfjs_available:
@@ -188,7 +189,7 @@ def _wrapper_html(file_url, filename, mime, pdfjs_available):
             f'<iframe id="wsv-pdf" src="{viewer_src}"></iframe>'
             f'</body></html>'
         ).encode('utf-8')
-        return _inject_with(body, _pdfjs_reload_script(file_url))
+        return _inject_with(body, _pdfjs_reload_script(file_url)) if keep_updated else body
 
     if mime.startswith('image/'):
         media = f'<img src="{file_url}" alt="{safe_name}">'
@@ -259,6 +260,7 @@ def main():
                    help='Rewrite GET / to GET /<single-file> internally')
     p.add_argument('--keep-updated', action='store_true',
                    help='Watch directory + SSE + inject reload script')
+    p.add_argument('--markdown', action='store_true')
     p.add_argument('--pdfjs-dir', default=None,
                    help='If set, mount pdf.js dist at /__pdfjs/ and use it '
                         'for the PDF single-file wrapper')
@@ -271,6 +273,10 @@ def main():
     keep_updated = args.keep_updated
     pdfjs_dir = os.path.abspath(args.pdfjs_dir) if args.pdfjs_dir else None
     pdfjs_root_real = os.path.realpath(pdfjs_dir) if pdfjs_dir else None
+    if args.markdown:
+        import markdown_view
+        source = Path(os.readlink(single_local))
+        assets = {}
     broker = Broker()
 
     if keep_updated:
@@ -302,11 +308,23 @@ def main():
                 return self._serve_sse(head)
             if pdfjs_dir and self.path.startswith('/__pdfjs/'):
                 return self._serve_pdfjs(head)
-            if single_url and self.path in ('/', ''):
-                # In keep-updated mode for non-HTML, browsers get the wrapper;
-                # everything else gets the file itself at the root URL.
-                if keep_updated and not _is_html_path(single_local) and _accepts_html(self.headers):
-                    return self._serve_wrapper(head)
+            path = self.path.partition('?')[0]
+            if args.markdown and path.startswith('/__wserv/assets/'):
+                asset = assets.get(urllib.parse.unquote(path))
+                if (asset is None or not asset.is_file()
+                        or not asset.resolve().is_relative_to(source.parent.resolve())):
+                    self.send_error(404)
+                    return
+                # Let the static handler stream the file and handle HEAD.
+                self.directory = str(asset.parent)
+                self.path = '/' + urllib.parse.quote(asset.name)
+                return super().do_HEAD() if head else super().do_GET()
+            if single_url and path in ('/', ''):
+                if _accepts_html(self.headers):
+                    if args.markdown:
+                        return self._serve_markdown(head)
+                    if pdfjs_dir or (keep_updated and not _is_html_path(single_local)):
+                        return self._serve_wrapper(head)
                 self.path = single_url
             if keep_updated:
                 return self._inject_get(head)
@@ -375,11 +393,23 @@ def main():
             finally:
                 broker.unsubscribe(q)
 
+        def _serve_markdown(self, head):
+            nonlocal assets
+            try:
+                body, assets = markdown_view.render(source)
+            except (OSError, UnicodeError) as e:
+                status = 404 if isinstance(e, FileNotFoundError) else 422
+                self.send_error(status, 'Cannot read Markdown file')
+                return
+            if keep_updated:
+                body = _inject(body)
+            self._send_body(body, 'text/html; charset=utf-8', head)
+
         def _serve_wrapper(self, head):
             mime, _ = mimetypes.guess_type(single_local)
             mime = mime or 'application/octet-stream'
             body = _wrapper_html(single_url, single_file, mime,
-                                 pdfjs_available=bool(pdfjs_dir))
+                                 pdfjs_available=bool(pdfjs_dir), keep_updated=keep_updated)
             self._send_body(body, 'text/html; charset=utf-8', head)
 
         def _inject_get(self, head):
