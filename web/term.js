@@ -7,7 +7,7 @@ const term = new Terminal({
   fontWeight: 300,
   fontWeightBold: 300,
   drawBoldTextInBrightColors: false,
-  letterSpacing: 1,
+  letterSpacing: 0,
   cursorBlink: true,
   // Use the normal sunset-sea-lbal-c80 tones for both ANSI ranges.
   theme: {
