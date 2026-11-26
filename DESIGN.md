@@ -3,6 +3,7 @@
 Use `sunset-sea-lbal-c80`. Set text to `#dcdcdc` on `#1a1a1a`.
 Use `#e0e0e0` for the cursor and `#1a1a1a` for text beneath it.
 Use `#e0e0e0` on `#454545` for selections.
+The browser terminal uses the Normal column for plain, bold, and bright ANSI colors.
 
 | ANSI | Normal | Bright |
 | --- | --- | --- |

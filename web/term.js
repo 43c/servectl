@@ -6,22 +6,22 @@ const term = new Terminal({
   fontSize: 15,
   fontWeight: 300,
   fontWeightBold: 300,
-  drawBoldTextInBrightColors: true,
+  drawBoldTextInBrightColors: false,
   letterSpacing: 1,
   cursorBlink: true,
-  // Ghostty's sunset-sea-lbal-c80 palette.
+  // Use the normal sunset-sea-lbal-c80 tones for both ANSI ranges.
   theme: {
     background: '#1a1a1a', foreground: '#dcdcdc',
     cursor: '#e0e0e0', cursorAccent: '#1a1a1a',
     selectionBackground: '#454545', selectionForeground: '#e0e0e0',
-    black: '#3a3a3a', brightBlack: '#555555',
-    red: '#e87977', brightRed: '#f76c6c',
-    green: '#b3cd73', brightGreen: '#b0cf59',
-    yellow: '#f6da87', brightYellow: '#fcd96b',
-    blue: '#7baed4', brightBlue: '#6dafdf',
-    magenta: '#eeab7d', brightMagenta: '#f9a66a',
-    cyan: '#82c3cf', brightCyan: '#70c6d5',
-    white: '#cdcdcd', brightWhite: '#eeeeee'
+    black: '#3a3a3a', brightBlack: '#3a3a3a',
+    red: '#e87977', brightRed: '#e87977',
+    green: '#b3cd73', brightGreen: '#b3cd73',
+    yellow: '#f6da87', brightYellow: '#f6da87',
+    blue: '#7baed4', brightBlue: '#7baed4',
+    magenta: '#eeab7d', brightMagenta: '#eeab7d',
+    cyan: '#82c3cf', brightCyan: '#82c3cf',
+    white: '#cdcdcd', brightWhite: '#cdcdcd'
   }
 });
 const fit = new FitAddon.FitAddon();
