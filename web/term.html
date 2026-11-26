@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>wserv terminal</title>
+  <link rel="stylesheet" href="/__wserv/fonts.css">
+  <link rel="stylesheet" href="/__wserv/vendor/xterm/xterm.css">
+  <style>
+    body { background: #1a1a1a; color: #dcdcdc; margin: 0; }
+    #terminal { height: 100dvh; box-sizing: border-box; padding: 6px; letter-spacing: normal; }
+    #status { position: absolute; bottom: 0; margin: 0; background: #1a1a1a; }
+  </style>
+</head>
+<body>
+  <main id="terminal" aria-label="Shell"></main>
+  <p id="status" role="status"></p>
+  <script src="/__wserv/vendor/xterm/xterm.js"></script>
+  <script src="/__wserv/vendor/xterm/addon-fit.js"></script>
+  <script type="module" src="/__wserv/term.js"></script>
+</body>
+</html>

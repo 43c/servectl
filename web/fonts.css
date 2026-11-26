@@ -22,6 +22,19 @@
   font-style: italic;
   font-display: swap;
 }
+@font-face {
+  font-family: "JetBrains Mono NL";
+  src: local("JetBrainsMonoNL-Light"), url("vendor/fonts/JetBrainsMonoNL-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono NL";
+  src: local("JetBrainsMonoNL-LightItalic"), url("vendor/fonts/JetBrainsMonoNL-LightItalic.ttf") format("truetype");
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
 :root { --wserv-font: "JetBrains Mono NL", monospace; font-family: var(--wserv-font); letter-spacing: 0.015em; }
 button, input, select, textarea, pre, code, kbd, samp { font-family: inherit; letter-spacing: inherit; }
 #toolbarContainer, #toolbarContainer :is(button, input, select, span),

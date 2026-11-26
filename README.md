@@ -1,6 +1,6 @@
 # wserv
 
-Serve directories and files over HTTP, with a registry to list, find, and stop them.
+Serve files and interactive terminals in a browser, with a registry to list, find, and stop them.
 
 ## Install
 
@@ -20,6 +20,7 @@ wserv host pdfjs paper.pdf    # read with PDF.js
 wserv host md notes.md        # read Markdown with tables, links, and Mermaid diagrams
 wserv host '*.png,notes/**'   # globs, comma-separated lists
 wserv 18000 quick share       # shorthand for: host --port 18000 -m "quick share"
+wserv term --port 18001       # start a browser shell in the current directory
 wserv ls                      # list tracked servers
 wserv open 18000              # open in browser
 wserv stop 18000              # stop by port
@@ -28,6 +29,7 @@ wserv stop 18000              # stop by port
 | Command | |
 | --- | --- |
 | `host [TARGET]` | Serve a dir, file, or glob set. Omit TARGET for the CWD. |
+| `term` | Host a terminal. Accepts `--port`, `--bind`, and `-m COMMENT`. |
 | `ls` | List tracked servers. |
 | `search TERM...` | Filter by comment, directory, or cmdline. |
 | `open PORT` | Open in the browser; prints the URL. |
@@ -54,8 +56,19 @@ content and clients.
 
 The Markdown viewer serves relative images and file links within the document’s
 directory. Use fenced `mermaid` blocks for diagrams and charts.
-Ace, its language modes and Vim bindings, Mermaid, and JetBrains Mono NL ship in
+Ace, Mermaid, xterm.js, and JetBrains Mono NL ship in
 `web/vendor.zip`. Run `python3 web/vendor.py` to rebuild from the pinned releases.
+
+Open the URL printed by `wserv term` and sign in as `wserv` with the generated
+password. Use `wserv term --password` to enter your own password at a hidden
+prompt. Use `wserv term --no-auth` to skip the browser login on loopback.
+Each tab opens its own shell as your user in the launch directory.
+Closing the tab disconnects its shell. Use `wserv stop PORT` to stop the server.
+
+Terminals bind to `127.0.0.1` by default. For remote access, forward the port
+over SSH (for example, `ssh -L 18001:localhost:18001 user@host`).
+Use `--bind 0.0.0.0` for direct access on a trusted network. Direct HTTP
+sends the credentials and terminal traffic without encryption.
 
 Commands taking a `PORT` accept `--pid` to address by pid instead.
 `ls`/`search`/`open`/`stop`/`add-comment` sync first; `--no-sync` skips it.

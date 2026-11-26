@@ -17,7 +17,7 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(
         prog='wserv',
-        description='Quick http.server manager backed by `uv run python -m http.server`.',
+        description='Host files and browser terminals, and manage running servers.',
     )
     subparsers = parser.add_subparsers(dest='command', metavar='COMMAND')
 

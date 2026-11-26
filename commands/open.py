@@ -16,7 +16,7 @@ def register(subparsers):
     p.set_defaults(func=run)
 
 
-def _hostname(addr, override):
+def hostname(addr, override=None):
     if override:
         return override
     if addr in ('0.0.0.0', '::', '[::]'):
@@ -38,7 +38,7 @@ def run(args):
         print(f"pid {entry.get('pid')} has no known bindings.", file=sys.stderr)
         return 1
     b = bindings[0]
-    url = f"http://{_hostname(b.get('addr', ''), args.host)}:{b.get('port')}/"
+    url = f"http://{hostname(b.get('addr', ''), args.host)}:{b.get('port')}/"
 
     opener = shutil.which('xdg-open') or shutil.which('open')
     if opener:

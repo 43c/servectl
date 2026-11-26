@@ -9,7 +9,8 @@ from pathlib import Path
 
 
 def package(name, version, digest):
-    url = f'https://registry.npmjs.org/{name}/-/{name}-{version}.tgz'
+    basename = name.rsplit('/', 1)[-1]
+    url = f'https://registry.npmjs.org/{name}/-/{basename}-{version}.tgz'
     with urllib.request.urlopen(url) as response:
         data = response.read()
     if hashlib.sha512(data).digest() != base64.b64decode(digest):
@@ -34,6 +35,12 @@ if __name__ == '__main__':
                 if parent == 'package/src-min-noconflict' and (name in assets or name.startswith('mode-')):
                     include(bundle, ace, parent.removeprefix('package/') + '/' + name, 'ace/' + name)
             include(bundle, ace, 'LICENSE', 'ace/LICENSE')
+        with package('@xterm/xterm', '6.0.0', 'TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==') as xterm:
+            for source in ('lib/xterm.js', 'css/xterm.css', 'LICENSE'):
+                include(bundle, xterm, source, 'xterm/' + Path(source).name)
+        with package('@xterm/addon-fit', '0.11.0', 'jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==') as fit:
+            include(bundle, fit, 'lib/addon-fit.js', 'xterm/addon-fit.js')
+            include(bundle, fit, 'LICENSE', 'xterm/addon-fit-LICENSE')
         with package('mermaid', '11.12.2', 'n34QPDPEKmaeCG4WDMGy0OT6PSyxKCfy2pJgShP+Qow2KLrvWjclwbc3yXfSIf4BanqWEhQEpngWwNp/XhZt6w==') as mermaid:
             include(bundle, mermaid, 'dist/mermaid.min.js', 'mermaid.min.js')
             include(bundle, mermaid, 'LICENSE', 'mermaid-LICENSE')
@@ -43,7 +50,7 @@ if __name__ == '__main__':
         if hashlib.sha256(data).hexdigest() != '6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf':
             raise ValueError('JetBrains Mono checksum mismatch')
         with zipfile.ZipFile(io.BytesIO(data)) as fonts:
-            faces = ('Regular', 'Italic', 'Bold', 'BoldItalic')
+            faces = ('Light', 'LightItalic', 'Regular', 'Italic', 'Bold', 'BoldItalic')
             paths = [f'fonts/ttf/JetBrainsMonoNL-{face}.ttf' for face in faces]
             for path in ['OFL.txt', *paths]:
                 entry = zipfile.ZipInfo('fonts/' + Path(path).name)

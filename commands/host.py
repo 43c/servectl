@@ -1,15 +1,9 @@
 import argparse
-import os
-import re
-import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
-import config
+from commands import _server
 import pdfjs
-import picker
-import record
 import staging
 
 _SERVE_SCRIPT = str(Path(__file__).resolve().parent.parent / '_serve.py')
@@ -41,39 +35,16 @@ def viewer_parser(viewer):
 
 
 def _host_options(p):
-    p.add_argument('--port', type=int, default=None,
-                   help='Explicit port (bypasses auto-pick range)')
-    p.add_argument('--bind', default='127.0.0.1',
-                   help='Address to bind (default 127.0.0.1; use 0.0.0.0 to '
-                        'expose on the network)')
-    p.add_argument('-m', '--comment', default='',
-                   help='Free-form note for the record')
+    _server.add_options(p)
     p.add_argument('--edit', action='store_true',
                    help='Allow text editing on a network bind (automatic on loopback)')
     p.add_argument('--keep-updated', action='store_true',
                    help='Watch files and live-reload browsers via SSE injection')
 
 
-def _sanitize(s):
-    cleaned = re.sub(r'[^A-Za-z0-9._-]+', '-', s).strip('-')
-    return cleaned or 'no-comment'
-
-
-def _pick_port(explicit, bind):
-    if explicit is not None:
-        return explicit
-    lo, hi = config.port_range()
-    port = picker.first_free_port(lo, hi, bind)
-    if port is None:
-        print(f'No free port in [{lo}, {hi}].', file=sys.stderr)
-        return None
-    return port
-
-
 def run(args):
-    config.ensure_dirs()
-
     try:
+        port = _server.pick_port(args)
         if args.viewer:
             label, suffixes = VIEWERS[args.viewer]
             path = Path(args.target).expanduser()
@@ -87,25 +58,6 @@ def run(args):
         print(str(e), file=sys.stderr)
         return 1
 
-    port = _pick_port(args.port, args.bind)
-    if port is None:
-        staging.cleanup(staging_dir)
-        return 1
-
-    for existing in record.find_by_port(port):
-        if record.is_alive(existing.get('pid')):
-            print(
-                f"Port {port} already tracked (pid {existing.get('pid')}, "
-                f"dir {existing.get('directory')}).",
-                file=sys.stderr,
-            )
-            staging.cleanup(staging_dir)
-            return 1
-        record.remove_pid(existing.get('pid'))
-
-    comment = args.comment or ''
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    log_path = config.LOGS_DIR / f"{timestamp}_{port}_{_sanitize(comment)}.log"
     cmd = ['uv', 'run']
     if args.viewer == 'md':
         cmd += ['--with', 'markdown-it-py[linkify]==4.2.0']
@@ -130,39 +82,11 @@ def run(args):
             staging.cleanup(staging_dir)
             return 1
 
-    with open(log_path, 'a', buffering=1) as log_file:
-        proc = subprocess.Popen(
-            cmd,
-            cwd=os.getcwd(),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-
-    entry = {
-        'pid': proc.pid,
-        'comment': comment,
-        'directory': root,
-        'target': args.target,
-        'staging_dir': staging_dir,
-        'single_file': single_file,
-        'keep_updated': args.keep_updated,
-        'cmdline': ' '.join(cmd),
-        'bindings': [{
-            'family': 'tcp6' if ':' in args.bind else 'tcp4',
-            'addr': args.bind,
-            'port': port,
-        }],
-        'timestamp': timestamp,
-        'log': str(log_path),
-        'source': 'spawned',
-    }
-    record.add(entry)
-
-    print(f"Hosting on port {port} (pid {proc.pid}).")
-    print(f"  root: {root}")
-    if staging_dir:
-        print(f"  staged: {args.target}")
-    print(f"  log:  {log_path}")
+    try:
+        _server.launch(args, port, cmd, root, target=args.target, staging_dir=staging_dir,
+                       single_file=single_file, keep_updated=args.keep_updated)
+    except OSError as e:
+        staging.cleanup(staging_dir)
+        print(f'wserv: {e}', file=sys.stderr)
+        return 1
     return 0
