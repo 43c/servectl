@@ -39,9 +39,23 @@ wserv stop 18000              # stop by port
 `host` flags: `--port`, `-m COMMENT`, `--bind ADDR` (default `127.0.0.1`),
 `--keep-updated` (reload on changes, preserving the current page in PDF.js).
 
+Directory listings show filenames, byte sizes, and an **Edit** link for writable
+text files, including extensionless files. An existing `index.html` opens as
+usual. Visit `/?list` to browse its directory or `/?edit` to edit a single hosted
+file. The Markdown viewer also has an **Edit source** link.
+
+Ace opens in Vim normal mode. Press `i` to edit, then `Esc` and `:w` followed by
+Enter to save to disk. The **Save** button works in either mode. If another
+editor changes the file, wserv keeps your buffer and reports the conflict.
+
+Editing is enabled on loopback. Use `--edit` with a network bind to let anyone
+who can reach the server modify the hosted text files. Use editing with trusted
+content and clients.
+
 The Markdown viewer serves relative images and file links within the document’s
-directory. Use fenced `mermaid` blocks for diagrams and charts. The browser
-loads Mermaid from jsDelivr when a document contains a diagram.
+directory. Use fenced `mermaid` blocks for diagrams and charts.
+Ace, its language modes and Vim bindings, Mermaid, and JetBrains Mono NL ship in
+`web/vendor.zip`. Run `python3 web/vendor.py` to rebuild from the pinned releases.
 
 Commands taking a `PORT` accept `--pid` to address by pid instead.
 `ls`/`search`/`open`/`stop`/`add-comment` sync first; `--no-sync` skips it.

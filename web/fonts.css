@@ -1,0 +1,28 @@
+@font-face {
+  font-family: "JetBrains Mono NL";
+  src: local("JetBrainsMonoNL-Regular"), url("vendor/fonts/JetBrainsMonoNL-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono NL";
+  src: local("JetBrainsMonoNL-Bold"), url("vendor/fonts/JetBrainsMonoNL-Bold.ttf") format("truetype");
+  font-weight: bold;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono NL";
+  src: local("JetBrainsMonoNL-Italic"), url("vendor/fonts/JetBrainsMonoNL-Italic.ttf") format("truetype");
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono NL";
+  src: local("JetBrainsMonoNL-BoldItalic"), url("vendor/fonts/JetBrainsMonoNL-BoldItalic.ttf") format("truetype");
+  font-weight: bold;
+  font-style: italic;
+  font-display: swap;
+}
+:root { --wserv-font: "JetBrains Mono NL", monospace; font-family: var(--wserv-font); letter-spacing: 0.015em; }
+button, input, select, textarea, pre, code, kbd, samp { font-family: inherit; letter-spacing: inherit; }
+#toolbarContainer, #toolbarContainer :is(button, input, select, span),
+#secondaryToolbar button { font-family: var(--wserv-font) !important; }

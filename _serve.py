@@ -31,6 +31,10 @@ import re
 import threading
 import time
 import urllib.parse
+import zipfile
+
+import file_view
+from picker import is_loopback
 from pathlib import Path
 
 # pdf.js ships these extensions; make sure they have correct MIME types.
@@ -183,6 +187,7 @@ def _wrapper_html(file_url, filename, mime, pdfjs_available, keep_updated):
         body = (
             f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
             f'<title>{safe_name}</title>'
+            f'<link rel="stylesheet" href="/__wserv/sunset.css">'
             f'<style>html,body{{margin:0;padding:0;height:100%}}'
             f'#wsv-pdf{{width:100vw;height:100vh;border:0;display:block}}</style>'
             f'</head><body>'
@@ -212,43 +217,17 @@ def _wrapper_html(file_url, filename, mime, pdfjs_available, keep_updated):
         f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
         f'<title>{safe_name}</title>'
         f'<style>html,body{{margin:0;padding:0}}'
-        f'body{{min-height:100vh;display:flex;align-items:center;justify-content:center;'
-        f'background:#111;color:#eee;font-family:system-ui,sans-serif}}'
+        f'body{{min-height:100vh;display:flex;align-items:center;justify-content:center}}'
         f'img,video{{max-width:100vw;max-height:100vh;object-fit:contain}}'
         f'embed{{width:100vw;height:100vh}}'
         f'pre{{width:100vw;height:100vh;margin:0;padding:1rem;box-sizing:border-box;'
-        f'overflow:auto;background:#111;color:#eee;'
-        f'font-family:ui-monospace,monospace;font-size:14px}}</style>'
+        f'overflow:auto;'
+        f'font-size:14px}}</style>'
+        f'<link rel="stylesheet" href="/__wserv/sunset.css">'
         f'</head><body>{media}</body></html>'
     )
     script = PDF_EMBED_RELOAD_SCRIPT if mime == 'application/pdf' else RELOAD_SCRIPT
     return _inject_with(body.encode('utf-8'), script)
-
-
-def _build_dir_listing(fs_path, url_path):
-    try:
-        entries = sorted(os.listdir(fs_path), key=lambda a: a.lower())
-    except OSError:
-        return None
-    display = html.escape(urllib.parse.unquote(url_path), quote=False)
-    out = [
-        '<!DOCTYPE html>',
-        '<html lang="en"><head><meta charset="utf-8">',
-        f'<title>Directory listing for {display}</title>',
-        '</head><body>',
-        f'<h1>Directory listing for {display}</h1>',
-        '<hr><ul>',
-    ]
-    for name in entries:
-        full = os.path.join(fs_path, name)
-        linkname = name + '/' if os.path.isdir(full) else name
-        displayname = linkname + ('@' if os.path.islink(full) else '')
-        out.append(
-            f'<li><a href="{urllib.parse.quote(linkname)}">'
-            f'{html.escape(displayname, quote=False)}</a></li>'
-        )
-    out.append('</ul><hr></body></html>')
-    return _inject('\n'.join(out).encode('utf-8'))
 
 
 def main():
@@ -260,6 +239,8 @@ def main():
                    help='Rewrite GET / to GET /<single-file> internally')
     p.add_argument('--keep-updated', action='store_true',
                    help='Watch directory + SSE + inject reload script')
+    p.add_argument('--edit', action='store_true')
+    p.add_argument('--staged', action='store_true')
     p.add_argument('--markdown', action='store_true')
     p.add_argument('--pdfjs-dir', default=None,
                    help='If set, mount pdf.js dist at /__pdfjs/ and use it '
@@ -277,6 +258,8 @@ def main():
         import markdown_view
         source = Path(os.readlink(single_local))
         assets = {}
+    files = file_view.Files(directory, args.staged)
+    vendor = zipfile.ZipFile(file_view.WEB / 'vendor.zip')
     broker = Broker()
 
     if keep_updated:
@@ -303,12 +286,100 @@ def main():
         def do_HEAD(self):
             self._dispatch(head=True)
 
+        def _editing_enabled(self):
+            try:
+                host = urllib.parse.urlsplit('//' + self.headers['Host']).hostname
+            except (TypeError, ValueError):
+                return False
+            return is_loopback(host) if is_loopback(args.bind) else args.edit
+
+        def _edit_target(self):
+            path = os.fsdecode(urllib.parse.unquote_to_bytes(self.path.partition('?')[0])).lstrip('/')
+            relative = path or single_file or ''
+            return relative, files.path(relative)
+
+        def do_PUT(self):
+            if self.path.partition('?')[2] != 'edit':
+                return self.send_error(404)
+            if (not self._editing_enabled()
+                    or self.headers.get('Origin') != 'http://' + self.headers.get('Host', '')):
+                return self.send_error(403)
+            try:
+                length = int(self.headers.get('Content-Length', '-1'))
+                if length < 0 or self.headers.get_content_type() != 'text/plain':
+                    raise ValueError('Expected a text document')
+                data = self.rfile.read(length)
+                if len(data) != length:
+                    raise ValueError('Incomplete request')
+                text = data.decode('utf-8')
+                _, path = self._edit_target()
+                tag = file_view.save(path, self.headers.get('If-Match'), text)
+            except file_view.ChangedOnDisk:
+                return self._save_error(409, 'File changed on disk. Copy your edits before reloading.')
+            except FileNotFoundError:
+                return self._save_error(404, 'File no longer available.')
+            except (OSError, RuntimeError):
+                return self._save_error(403, 'Could not write this file.')
+            except (ValueError, OverflowError):
+                return self._save_error(422, 'Cannot save this text in the original encoding.')
+            self.send_response(204)
+            self.send_header('ETag', tag)
+            self.end_headers()
+
+        def _save_error(self, status, message):
+            body = message.encode()
+            self.send_response(status)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _editor(self, head):
+            if not self._editing_enabled():
+                return self.send_error(403)
+            try:
+                relative, path = self._edit_target()
+                back = '/' if args.markdown else './?list'
+                body = file_view.editor(path, relative, back)
+            except FileNotFoundError:
+                return self.send_error(404)
+            except (OSError, RuntimeError):
+                return self.send_error(403)
+            except ValueError:
+                return self.send_error(415, 'Expected a text file')
+            self._send_body(body, 'text/html; charset=utf-8', head)
+
+        def list_directory(self, path):
+            # SimpleHTTPRequestHandler calls this after checking for an index.
+            relative = Path(path).relative_to(directory)
+            try:
+                body = file_view.listing(Path(path), relative, files, self._editing_enabled())
+            except OSError:
+                return self.send_error(403)
+            if keep_updated:
+                body = _inject(body)
+            self._send_body(body, 'text/html; charset=utf-8', self.command == 'HEAD')
+
         def _dispatch(self, head):
             if keep_updated and self.path == '/__wserv/reload':
                 return self._serve_sse(head)
             if pdfjs_dir and self.path.startswith('/__pdfjs/'):
                 return self._serve_pdfjs(head)
-            path = self.path.partition('?')[0]
+            path, _, query = self.path.partition('?')
+            if path.startswith('/__wserv/vendor/'):
+                try:
+                    body = vendor.read(path.removeprefix('/__wserv/vendor/'))
+                except KeyError:
+                    return self.send_error(404)
+                return self._send_body(body, self.guess_type(path), head, cache_control='no-cache')
+            if path in ('/__wserv/ui.css', '/__wserv/fonts.css', '/__wserv/editor.js',
+                        '/__wserv/sunset.css', '/__wserv/pdfjs.css', '/__wserv/theme-sunset.js'):
+                body = (file_view.WEB / Path(path).name).read_bytes()
+                return self._send_body(body, self.guess_type(path), head)
+            if query == 'edit':
+                return self._editor(head)
+            if query == 'list' and path.endswith('/') and os.path.isdir(self.translate_path(path)):
+                return self.list_directory(self.translate_path(path))
             if args.markdown and path.startswith('/__wserv/assets/'):
                 asset = assets.get(urllib.parse.unquote(path))
                 if (asset is None or not asset.is_file()
@@ -361,9 +432,11 @@ def main():
             except OSError:
                 self.send_error(404, 'Not found')
                 return
-            # pdf.js assets are versioned by directory; let them cache.
+            if rel == 'web/viewer.html':
+                content = content.replace(b'</head>', b'<link rel="stylesheet" href="/__wserv/pdfjs.css"></head>', 1)
+            # Revalidate our customized viewer shell after a theme update.
             self._send_body(content, ctype or 'application/octet-stream', head,
-                            cache_control='public, max-age=86400')
+                            cache_control='no-cache' if rel == 'web/viewer.html' else 'public, max-age=86400')
 
         # --- handlers ---
 
@@ -401,6 +474,8 @@ def main():
                 status = 404 if isinstance(e, FileNotFoundError) else 422
                 self.send_error(status, 'Cannot read Markdown file')
                 return
+            if self._editing_enabled():
+                body = _inject_with(body, b'<p style="max-width:76ch;margin:1rem auto"><a href="?edit">Edit source</a></p>')
             if keep_updated:
                 body = _inject(body)
             self._send_body(body, 'text/html; charset=utf-8', head)
@@ -415,9 +490,10 @@ def main():
         def _inject_get(self, head):
             fs_path = self.translate_path(self.path)
             if os.path.isdir(fs_path):
-                if not self.path.endswith('/'):
+                path, sep, query = self.path.partition('?')
+                if not path.endswith('/'):
                     self.send_response(301)
-                    self.send_header('Location', self.path + '/')
+                    self.send_header('Location', path + '/' + sep + query)
                     self.send_header('Content-Length', '0')
                     self.end_headers()
                     return
@@ -427,12 +503,7 @@ def main():
                         fs_path = idx
                         break
                 else:
-                    body = _build_dir_listing(fs_path, self.path)
-                    if body is None:
-                        self.send_error(403, 'No permission to list directory')
-                        return
-                    self._send_body(body, 'text/html; charset=utf-8', head)
-                    return
+                    return self.list_directory(fs_path)
 
             try:
                 with open(fs_path, 'rb') as f:

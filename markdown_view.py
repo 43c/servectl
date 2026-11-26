@@ -54,19 +54,39 @@ def render(source):
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(source.name)}</title>
+<link rel="stylesheet" href="/__wserv/sunset.css">
 <style>
-:root {{color-scheme:light dark; font:17px/1.65 system-ui,sans-serif}}
+:root {{font-size:17px; line-height:1.65}}
 main {{max-width:76ch; margin:auto; padding:clamp(1rem,4vw,3rem); overflow-wrap:anywhere}}
 h1,h2,h3 {{line-height:1.25}} img,svg {{max-width:100%}}
 pre,blockquote,th,td {{padding:.4em .8em}}
-pre,code {{background:color-mix(in srgb, CanvasText 7%, Canvas); border-radius:.25em}}
-pre {{overflow:auto}} blockquote {{margin-left:0; border-left:3px solid GrayText}}
-table {{border-collapse:collapse; display:block; overflow:auto}} th,td {{border:1px solid GrayText}}
+pre,code {{background:var(--sunset-black)}}
+pre {{overflow:auto}} blockquote {{margin-left:0; border-left:3px solid var(--sunset-blue)}}
+pre:has(> svg) {{background:transparent}}
+hr {{border:0; border-top:1px solid var(--sunset-brightBlack)}}
+table {{border-collapse:collapse; display:block; overflow:auto}} th,td {{border:1px solid var(--sunset-brightBlack)}}
 </style></head><body><main>{content}</main>'''
     if any(t.type == 'fence' and t.info.split()[:1] == ['mermaid'] for t in tokens):
-        body += '''<script type="module">
-import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.esm.min.mjs';
-mermaid.initialize({startOnLoad:false, theme:matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'default'});
+        body += '''<script src="/__wserv/vendor/mermaid.min.js"></script><script type="module">
+await document.fonts.ready;
+const style = getComputedStyle(document.body);
+const color = key => style.getPropertyValue('--sunset-' + key).trim();
+const series = ['blue', 'magenta', 'green', 'yellow', 'cyan', 'red',
+                'brightBlue', 'brightMagenta', 'brightGreen', 'brightYellow', 'brightCyan', 'brightRed'].map(color);
+mermaid.initialize({
+    startOnLoad: false, theme: 'base', fontFamily: style.fontFamily,
+    themeVariables: {
+        darkMode: true, background: color('background'), textColor: color('foreground'),
+        primaryColor: color('black'), primaryTextColor: color('foreground'), primaryBorderColor: color('blue'),
+        secondaryColor: color('black'), secondaryTextColor: color('foreground'), secondaryBorderColor: color('cyan'),
+        tertiaryColor: color('background'), tertiaryTextColor: color('foreground'), tertiaryBorderColor: color('magenta'),
+        lineColor: color('white'), edgeLabelBackground: color('background'),
+        noteBkgColor: color('black'), noteTextColor: color('foreground'), noteBorderColor: color('yellow'),
+        ...Object.fromEntries(series.map((value, i) => ['pie' + (i + 1), value])),
+        pieSectionTextColor: color('background'), pieLegendTextColor: color('foreground'),
+        xyChart: {backgroundColor: color('background'), plotColorPalette: series.join(',')}
+    }
+});
 const nodes = [];
 for (const code of document.querySelectorAll('pre > code.language-mermaid')) {
     const pre = code.parentElement;

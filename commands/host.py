@@ -48,6 +48,8 @@ def _host_options(p):
                         'expose on the network)')
     p.add_argument('-m', '--comment', default='',
                    help='Free-form note for the record')
+    p.add_argument('--edit', action='store_true',
+                   help='Allow text editing on a network bind (automatic on loopback)')
     p.add_argument('--keep-updated', action='store_true',
                    help='Watch files and live-reload browsers via SSE injection')
 
@@ -111,6 +113,10 @@ def run(args):
             '--port', str(port), '--directory', root, '--bind', args.bind]
     if single_file:
         cmd += ['--single-file', single_file]
+    if staging_dir:
+        cmd += ['--staged']
+    if args.edit:
+        cmd += ['--edit']
     if args.keep_updated:
         cmd += ['--keep-updated']
 

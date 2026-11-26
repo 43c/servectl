@@ -1,8 +1,19 @@
+import ipaddress
 import socket
 
 
+def is_loopback(host):
+    if host == 'localhost':
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def is_port_free(port, host='127.0.0.1'):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    family = socket.AF_INET6 if ':' in host else socket.AF_INET
+    s = socket.socket(family, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         try:

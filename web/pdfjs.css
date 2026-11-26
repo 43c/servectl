@@ -1,0 +1,40 @@
+@import url("sunset.css");
+
+@media screen and (forced-colors: none) {
+  :root {
+    --main-color: var(--sunset-foreground);
+    --body-bg-color: var(--sunset-background);
+    --toolbar-bg-color: var(--sunset-black);
+    --toolbar-border-color: var(--sunset-brightBlack);
+    --toolbar-icon-bg-color: var(--sunset-foreground);
+    --toolbar-icon-hover-bg-color: var(--sunset-brightWhite);
+    --button-hover-color: var(--sunset-selectionBackground);
+    --toggled-btn-color: var(--sunset-magenta);
+    --toggled-btn-bg-color: var(--sunset-background);
+    --field-bg-color: var(--sunset-background);
+    --field-color: var(--sunset-foreground);
+    --field-border-color: var(--sunset-brightBlack);
+    --dropdown-btn-bg-color: var(--sunset-black);
+    --doorhanger-bg-color: var(--sunset-black);
+    --doorhanger-border-color: var(--sunset-brightBlack);
+    --doorhanger-hover-color: var(--sunset-foreground);
+    --doorhanger-separator-color: var(--sunset-brightBlack);
+    --progressBar-color: var(--sunset-magenta);
+  }
+  #viewsManager, .sidebar {
+    --sidebar-bg-color: var(--sunset-black);
+    --text-color: var(--sunset-foreground);
+    --button-focus-outline-color: var(--sunset-magenta);
+  }
+  .dialog {
+    --dialog-bg-color: var(--sunset-black);
+    --dialog-border-color: var(--sunset-brightBlack);
+    --text-primary-color: var(--sunset-foreground);
+    --text-secondary-color: var(--sunset-white);
+    --link-fg-color: var(--sunset-magenta);
+    --button-primary-bg-color: var(--sunset-magenta);
+    --button-primary-fg-color: var(--sunset-background);
+    --button-primary-hover-bg-color: var(--sunset-brightMagenta);
+    --input-text-bg-color: var(--sunset-background);
+  }
+}

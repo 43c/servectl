@@ -1,0 +1,33 @@
+@import url("fonts.css");
+
+:root {
+  --sunset-background: #1a1a1a;
+  --sunset-foreground: #dcdcdc;
+  --sunset-cursor: #e0e0e0;
+  --sunset-cursorAccent: #1a1a1a;
+  --sunset-selectionBackground: #454545;
+  --sunset-selectionForeground: #e0e0e0;
+  --sunset-black: #3a3a3a;
+  --sunset-brightBlack: #555555;
+  --sunset-red: #e87977;
+  --sunset-brightRed: #f76c6c;
+  --sunset-green: #b3cd73;
+  --sunset-brightGreen: #b0cf59;
+  --sunset-yellow: #f6da87;
+  --sunset-brightYellow: #fcd96b;
+  --sunset-blue: #7baed4;
+  --sunset-brightBlue: #6dafdf;
+  --sunset-magenta: #eeab7d;
+  --sunset-brightMagenta: #f9a66a;
+  --sunset-cyan: #82c3cf;
+  --sunset-brightCyan: #70c6d5;
+  --sunset-white: #cdcdcd;
+  --sunset-brightWhite: #eeeeee;
+  color-scheme: dark;
+  color: var(--sunset-foreground);
+  background: var(--sunset-background);
+  accent-color: var(--sunset-magenta);
+}
+::selection { background: var(--sunset-selectionBackground); color: var(--sunset-selectionForeground); }
+a { color: var(--sunset-magenta); text-underline-offset: .2em; }
+:focus-visible { outline: 2px solid var(--sunset-magenta); outline-offset: 2px; }

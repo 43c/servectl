@@ -1,0 +1,19 @@
+@import url("sunset.css");
+
+:root { font-size: 16px; line-height: 1.5; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 62rem; margin: auto; padding: clamp(1rem, 4vw, 3.5rem); }
+h1 { font-size: clamp(1.3rem, 3vw, 2rem); overflow-wrap: anywhere; margin: 0 0 .6rem; }
+table { width: 100%; margin-top: 2rem; border-collapse: collapse; }
+th { border-bottom: 1px solid var(--sunset-brightBlack); text-align: left; font-size: .85rem; }
+th, td { padding: .55rem 0; }
+td { border-bottom: 1px solid var(--sunset-black); overflow-wrap: anywhere; }
+td + td, th + th { text-align: right; padding-left: 1rem; width: 1%; white-space: nowrap; }
+.workspace { height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
+header, footer { padding: .55rem 1rem; display: flex; align-items: center; gap: 1rem; }
+header { border-bottom: 1px solid var(--sunset-brightBlack); }
+header h1 { font-size: 1rem; margin: 0; flex: 1; }
+button { background: var(--sunset-magenta); color: var(--sunset-background); font: inherit; border: 0; padding: .25rem .85rem; cursor: pointer; }
+footer { border-top: 1px solid var(--sunset-brightBlack); justify-content: space-between; font-size: .85rem; }
+#editor { font-size: 15px; }
