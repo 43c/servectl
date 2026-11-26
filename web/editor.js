@@ -2,7 +2,7 @@ const file = JSON.parse(document.querySelector('#document').textContent);
 const editor = ace.edit('editor', {showPrintMargin: false, useWorker: false});
 ace.config.set('basePath', '/__wserv/vendor/ace');
 editor.session.setMode(ace.require('ace/ext/modelist').getModeForPath(file.name).mode);
-editor.setValue(file.text, -1);
+editor.session.setValue(file.text);
 editor.setOption('fontFamily', getComputedStyle(document.documentElement).fontFamily);
 ace.config.setModuleUrl('ace/theme/sunset', '/__wserv/theme-sunset.js');
 editor.setTheme('ace/theme/sunset');
@@ -29,7 +29,7 @@ async function save() {
     if (!response.ok) throw new Error(await response.text());
     file.version = response.headers.get('ETag');
     saved = text;
-    status.textContent = saved === editor.getValue() ? 'Saved' : 'Modified';
+    status.textContent = saved === editor.getValue() ? 'Saved to disk' : 'Saved. New edits pending.';
   } catch (error) {
     status.textContent = error.message;
   } finally {
@@ -38,13 +38,23 @@ async function save() {
   }
 }
 button.addEventListener('click', save);
+for (const action of ['undo', 'redo']) {
+  document.getElementById(action).addEventListener('click', () => {
+    editor[action]();
+    editor.focus();
+  });
+}
 editor.commands.addCommand({name: 'save', bindKey: {win: 'Ctrl-S', mac: 'Command-S'}, exec: save});
 ace.require('ace/keyboard/vim').Vim.defineEx('write', 'w', save);
-editor.setKeyboardHandler('ace/keyboard/vim');
+const vim = document.querySelector('#vim');
 function showMode() {
-  const mode = editor.getKeyboardHandler().getStatusText(editor) || 'NORMAL';
-  document.querySelector('#mode').textContent = 'Vim · ' + mode;
+  document.querySelector('#mode').textContent = vim.checked
+    ? editor.getKeyboardHandler().getStatusText?.(editor) || 'NORMAL' : '';
+}
+function setMode() {
+  editor.setKeyboardHandler(vim.checked ? 'ace/keyboard/vim' : null, showMode);
+  editor.focus();
 }
 editor.on('changeStatus', showMode);
-showMode();
-editor.focus();
+vim.addEventListener('change', setMode);
+setMode();

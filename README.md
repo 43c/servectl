@@ -47,7 +47,8 @@ usual. Visit `/?list` to browse its directory or `/?edit` to edit a single hoste
 file. The Markdown viewer also has an **Edit source** link.
 
 Ace opens in Vim normal mode. Press `i` to edit, then `Esc` and `:w` followed by
-Enter to save to disk. The **Save** button works in either mode. If another
+Enter to save to disk. Uncheck **Vim mode** for standard editing. The **save**,
+**undo**, and **redo** buttons work in both modes. If another
 editor changes the file, wserv keeps your buffer and reports the conflict.
 
 Editing is enabled on loopback. Use `--edit` with a network bind to let anyone

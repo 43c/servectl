@@ -139,9 +139,11 @@ def editor(path, relative, back):
     document = json.dumps(dict(text=text, version=version(data), name=path.name)).replace('<', r'\u003c')
     label = html.escape('/' + relative)
     return page('Edit ' + relative, f'''<section class="workspace">
-<header><a href="{back}">Back</a><h1>{label}</h1><button id="save">Save</button></header>
+<header><a href="{back}">Back</a><h1>{label}</h1>
+<button id="save">save</button><button id="undo">undo</button><button id="redo">redo</button></header>
 <div id="editor" aria-label="File contents"></div>
-<footer><span id="mode">Vim</span><output id="status" role="status"></output></footer>
+<footer><label><input id="vim" type="checkbox" checked> Vim mode</label><span id="mode"></span>
+<output id="status" role="status"></output></footer>
 </section><script type="application/json" id="document">{document}</script>
 <script src="/__wserv/vendor/ace/ace.js"></script>
 <script src="/__wserv/vendor/ace/ext-modelist.js"></script>
