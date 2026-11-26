@@ -1,8 +1,17 @@
 const view = document.querySelector('#terminal');
 const status = document.querySelector('#status');
-await document.fonts.load('300 15px "JetBrains Mono NL"');
+const font = getComputedStyle(view).fontFamily;
+const touch = matchMedia('(pointer: coarse)').matches;
+const viewport = window.visualViewport;
+if (touch && viewport) {
+  function sizeToViewport() {
+    if (viewport.scale === 1) document.body.style.height = viewport.height + 'px';
+  }
+  sizeToViewport();
+  viewport.addEventListener('resize', sizeToViewport);
+}
 const term = new Terminal({
-  fontFamily: getComputedStyle(view).fontFamily,
+  fontFamily: 'monospace',
   fontSize: 15,
   fontWeight: 300,
   fontWeightBold: 300,
@@ -28,20 +37,29 @@ const fit = new FitAddon.FitAddon();
 term.loadAddon(fit);
 term.open(view);
 fit.fit();
+document.fonts.load('300 15px "JetBrains Mono NL"').then(() => {
+  term.options.fontFamily = font;
+  fit.fit();
+}, () => {}); // Keep using monospace if the font cannot load.
 
 const url = new URL('/ws', location.href);
 url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+status.textContent = 'Connecting to shell…';
 const socket = new WebSocket(url);
 function send(message) {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 socket.onopen = () => {
   send(['set_size', term.rows, term.cols]);
-  term.focus();
+  status.textContent = 'Waiting for shell…';
+  if (!touch) term.focus();
 };
 socket.onmessage = event => {
   const [type, data] = JSON.parse(event.data);
-  if (type === 'stdout') term.write(data);
+  if (type === 'stdout' && data) {
+    status.textContent = '';
+    term.write(data);
+  }
 };
 socket.onclose = () => {
   term.options.disableStdin = true;
@@ -49,4 +67,6 @@ socket.onclose = () => {
 };
 term.onData(data => send(['stdin', data]));
 term.onResize(({rows, cols}) => send(['set_size', rows, cols]));
-new ResizeObserver(() => fit.fit()).observe(view);
+const observer = new ResizeObserver(() => requestAnimationFrame(() => fit.fit()));
+observer.observe(view);
+observer.observe(term.element.querySelector('.xterm-screen'));

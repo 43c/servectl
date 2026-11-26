@@ -7,16 +7,27 @@
   <link rel="stylesheet" href="/__wserv/fonts.css">
   <link rel="stylesheet" href="/__wserv/vendor/xterm/xterm.css">
   <style>
-    body { background: #1a1a1a; color: #dcdcdc; margin: 0; }
-    #terminal { height: 100dvh; box-sizing: border-box; padding: 6px; letter-spacing: normal; }
+    body {
+      background: #1a1a1a; color: #dcdcdc; margin: 0; padding: 6px; box-sizing: border-box;
+      height: 100vh; height: 100dvh; position: relative;
+      -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+    }
+    #terminal { height: 100%; letter-spacing: normal; }
+    @media (pointer: coarse) {
+      .xterm .xterm-helper-textarea { font-size: 16px; }
+    }
     #status { position: absolute; bottom: 0; margin: 0; background: #1a1a1a; }
   </style>
 </head>
 <body>
   <main id="terminal" aria-label="Shell"></main>
-  <p id="status" role="status"></p>
+  <p id="status" role="status">Loading terminal…</p>
   <script src="/__wserv/vendor/xterm/xterm.js"></script>
   <script src="/__wserv/vendor/xterm/addon-fit.js"></script>
-  <script type="module" src="/__wserv/term.js"></script>
+  <script type="module">
+    import('/__wserv/term.js').catch(error => {
+      document.querySelector('#status').textContent = 'Terminal could not start: ' + error.message;
+    });
+  </script>
 </body>
 </html>
